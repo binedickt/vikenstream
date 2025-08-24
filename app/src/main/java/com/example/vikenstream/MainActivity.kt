@@ -1,62 +1,279 @@
 package com.example.vikenstream
+
 import android.os.Bundle
+import android.view.View
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
+import com.example.vikenstream.databinding.ActivityMainBinding
 import io.livekit.android.LiveKit
 import io.livekit.android.room.Room
+import io.livekit.android.room.track.Track
 import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.collect
 import io.livekit.android.room.track.VideoTrack
-import io.livekit.android.room.track.Track
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.collectLatest
+import okhttp3.*
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import org.json.JSONObject
+import org.json.JSONArray
+import java.io.IOException
+import kotlin.coroutines.resumeWithException
+import kotlin.coroutines.resume
+import kotlinx.coroutines.suspendCancellableCoroutine
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var room: Room
+    private lateinit var binding: ActivityMainBinding
+    private var room: Room? = null
+    private var accessToken: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
-        room = LiveKit.create(applicationContext)
+        setupUI()
+    }
 
-        CoroutineScope(Dispatchers.Main).launch {
-            room.events.collect { event ->
-                when (event) {
-                    is RoomEvent.Connected -> {
-                        println("✅ Connected to room!")
-                    }
-                    is RoomEvent.Disconnected -> {
-                        println("❌ Disconnected: ${event.error}")
-                    }
-                    is RoomEvent.TrackSubscribed -> {
-                        val track: Track = event.track
-                        if (track is VideoTrack) {
-                            println("🎥 Subscribed to video track")
-                        }
-                    }
-                    else -> {
-                        println("📢 Event: $event")
-                    }
-                }
+    private fun setupUI() {
+        binding.loginButton.setOnClickListener {
+            val username = binding.usernameEditText.text.toString().trim()
+            val password = binding.passwordEditText.text.toString().trim()
+
+            if (validateInput(username, password)) {
+                connectToBackend(username, password)
             }
         }
 
-        CoroutineScope(Dispatchers.IO).launch {
+        binding.roomList.layoutManager = LinearLayoutManager(this)
+    }
+
+    private fun validateInput(username: String, password: String): Boolean {
+        return when {
+            username.isEmpty() -> {
+                binding.usernameEditText.error = "Username is required"
+                false
+            }
+            password.isEmpty() -> {
+                binding.passwordEditText.error = "Password is required"
+                false
+            }
+            username.length < 3 -> {
+                binding.usernameEditText.error = "Username must be at least 3 characters"
+                false
+            }
+            password.length < 6 -> {
+                binding.passwordEditText.error = "Password must be at least 6 characters"
+                false
+            }
+            else -> true
+        }
+    }
+
+    private fun connectToBackend(username: String, password: String) {
+        binding.loginButton.isEnabled = false
+        binding.loginButton.text = "Connecting..."
+
+        lifecycleScope.launch {
             try {
-                room.connect(
-                    url = "wss://viken.stream:7880",
-                    token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZGVudGl0eSI6IiIsIm5hbWUiOiJ1c2VyMSIsInZpZGVvIjp7InJvb21DcmVhdGUiOmZhbHNlLCJyb29tTGlzdCI6ZmFsc2UsInJvb21SZWNvcmQiOmZhbHNlLCJyb29tQWRtaW4iOmZhbHNlLCJyb29tSm9pbiI6dHJ1ZSwicm9vbSI6InB1YmxpYyIsImNhblB1Ymxpc2giOnRydWUsImNhblN1YnNjcmliZSI6dHJ1ZSwiY2FuUHVibGlzaERhdGEiOnRydWUsImNhblB1Ymxpc2hTb3VyY2VzIjpbXSwiY2FuVXBkYXRlT3duTWV0YWRhdGEiOmZhbHNlLCJpbmdyZXNzQWRtaW4iOmZhbHNlLCJoaWRkZW4iOmZhbHNlLCJyZWNvcmRlciI6ZmFsc2UsImFnZW50IjpmYWxzZX0sIm1ldGFkYXRhIjoiIiwic2hhMjU2IjoiIiwic3ViIjoidXNlcjEiLCJpc3MiOiJBUElEVkxpdWZKNW52eW8iLCJuYmYiOjE3NTYwMzI3MTcsImV4cCI6MTc1NjAzNjMxN30.Fzpu3l51ecWlRHEZhShOyOpH7y-XzOziI9WDqb3GUYQ"
-                )
+                // Authenticate user → get access token
+                accessToken = fetchTokenFromServer(username, password)
+
+                // Fetch list of rooms from backend
+                val rooms = fetchRooms(accessToken!!)
+
+                runOnUiThread { showRoomsList(rooms) }
+
             } catch (e: Exception) {
-                e.printStackTrace()
+                runOnUiThread {
+                    binding.loginButton.isEnabled = true
+                    binding.loginButton.text = "Login"
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Login failed: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             }
         }
     }
 
+    private suspend fun fetchTokenFromServer(username: String, password: String): String {
+        return suspendCancellableCoroutine { cont ->
+            val client = OkHttpClient()
+
+            val json = JSONObject()
+                .put("username", username)
+                .put("password", password)
+
+            val requestBody = json.toString().toRequestBody("application/json".toMediaType())
+
+            val request = Request.Builder()
+                .url("https://viken.stream:8443/login")
+                .post(requestBody)
+                .build()
+
+            client.newCall(request).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    if (cont.isActive) cont.resumeWithException(e)
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    response.use {
+                        if (!response.isSuccessful) {
+                            if (cont.isActive) cont.resumeWithException(
+                                IOException("Unexpected code $response")
+                            )
+                            return
+                        }
+
+                        val body = response.body?.string()
+                        val jsonResp = JSONObject(body ?: "{}")
+                        if (jsonResp.optBoolean("success")) {
+                            val token = jsonResp.getString("access_token")
+                            if (cont.isActive) cont.resume(token)
+                        } else {
+                            if (cont.isActive) cont.resumeWithException(
+                                Exception("Invalid credentials")
+                            )
+                        }
+                    }
+                }
+            })
+        }
+    }
+
+    private suspend fun fetchRooms(token: String): List<String> {
+        return suspendCancellableCoroutine { cont ->
+            val client = OkHttpClient()
+
+            val request = Request.Builder()
+                .url("https://viken.stream:8443/rooms")
+                .get()
+                .addHeader("Authorization", "Bearer $token")
+                .build()
+
+            client.newCall(request).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    if (cont.isActive) cont.resumeWithException(e)
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    response.use {
+                        if (!response.isSuccessful) {
+                            if (cont.isActive) cont.resumeWithException(
+                                IOException("Unexpected code $response")
+                            )
+                            return
+                        }
+
+                        val body = response.body?.string()
+                        val jsonObj = JSONObject(body ?: "{}")
+                        val jsonArr = jsonObj.getJSONArray("rooms")
+                        val rooms = mutableListOf<String>()
+                        for (i in 0 until jsonArr.length()) {
+                            val room = jsonArr.getJSONObject(i)
+                            rooms.add(room.getString("name"))
+                        }
+                        if (cont.isActive) cont.resume(rooms)
+                    }
+                }
+            })
+        }
+    }
+
+    private fun showRoomsList(rooms: List<String>) {
+        binding.loginContainer.visibility = View.GONE
+        binding.roomListContainer.visibility = View.VISIBLE
+
+        val adapter = RoomsAdapter(rooms) { roomName ->
+            joinRoom(roomName)
+        }
+        binding.roomList.adapter = adapter
+    }
+
+    private fun joinRoom(roomName: String) {
+        lifecycleScope.launch {
+            try {
+                // Connect to the room using LiveKit's helper
+                if (room == null) {
+                    room = LiveKit.create(appContext = this@MainActivity)
+                }
+
+                // ✅ connect with url + token
+                room?.connect(
+                    url = "wss://viken.stream:7880",
+                    token = accessToken!!
+                )
+
+                setupRoomEvents(room!!)
+                showVideoCallScreen()
+
+            } catch (e: Exception) {
+                runOnUiThread {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Failed to join room: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
+
+
+    private fun setupRoomEvents(room: Room) {
+        lifecycleScope.launch {
+            room.events.collect { event ->
+                when (event) {
+                    is RoomEvent.Connected -> {
+                        runOnUiThread {
+                            Toast.makeText(this@MainActivity, "✅ Connected to room!", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    is RoomEvent.Disconnected -> {
+                        runOnUiThread {
+                            Toast.makeText(this@MainActivity, "❌ Disconnected: ${event.error}", Toast.LENGTH_LONG).show()
+                            showLoginScreen()
+                        }
+                    }
+                    is RoomEvent.TrackSubscribed -> {
+                        val track = event.track
+                        if (track is VideoTrack) {
+                            runOnUiThread {
+                                Toast.makeText(this@MainActivity, "🎥 Video track received", Toast.LENGTH_SHORT).show()
+                                // TODO: attach the video track to your SurfaceView
+                            }
+                        }
+                    }
+                    else -> println("📢 Event: $event")
+                }
+            }
+        }
+    }
+
+
+
+    private fun showLoginScreen() {
+        binding.loginContainer.visibility = View.VISIBLE
+        binding.roomListContainer.visibility = View.GONE
+        binding.videoCallContainer.visibility = View.GONE
+        binding.loginButton.isEnabled = true
+        binding.loginButton.text = "Login"
+    }
+
+    private fun showVideoCallScreen() {
+        binding.loginContainer.visibility = View.GONE
+        binding.roomListContainer.visibility = View.GONE
+        binding.videoCallContainer.visibility = View.VISIBLE
+    }
+
     override fun onDestroy() {
         super.onDestroy()
-        room.disconnect()
+        room?.disconnect()
     }
 }
