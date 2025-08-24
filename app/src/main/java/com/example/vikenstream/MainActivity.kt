@@ -199,18 +199,26 @@ class MainActivity : AppCompatActivity() {
     private fun joinRoom(roomName: String) {
         lifecycleScope.launch {
             try {
-                // Connect to the room using LiveKit's helper
-                if (room == null) {
-                    room = LiveKit.create(appContext = this@MainActivity)
-                }
+                // Disconnect previous room if exists
+                room?.disconnect()
+                room = null
 
-                // ✅ connect with url + token
+                // Request LiveKit room token from backend
+                val liveKitToken = fetchLiveKitToken(roomName, accessToken!!)
+
+                // Create new Room instance
+                room = LiveKit.create(this@MainActivity)
+
+                // Connect to the LiveKit room using the token
                 room?.connect(
-                    url = "wss://viken.stream:7880",
-                    token = accessToken!!
+                    url = "wss://viken.stream:8443",
+                    token = liveKitToken
                 )
 
+                // Setup room event handlers
                 setupRoomEvents(room!!)
+
+                // Show video call UI
                 showVideoCallScreen()
 
             } catch (e: Exception) {
@@ -225,6 +233,42 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Fetch LiveKit JWT token for this user and room from your backend
+     */
+    private suspend fun fetchLiveKitToken(roomName: String, accessToken: String): String {
+        return suspendCancellableCoroutine { cont ->
+            val client = OkHttpClient()
+            val request = Request.Builder()
+                .url("https://viken.stream:8443/token?room=$roomName")
+                .get()
+                .addHeader("Authorization", "Bearer $accessToken")
+                .build()
+
+            client.newCall(request).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    if (cont.isActive) cont.resumeWithException(e)
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    response.use {
+                        if (!response.isSuccessful) {
+                            if (cont.isActive) cont.resumeWithException(
+                                IOException("Unexpected code $response")
+                            )
+                            return
+                        }
+
+                        val body = response.body?.string()
+                        val json = JSONObject(body ?: "{}")
+                        val token = json.getString("token") // backend must return { "token": "<jwt>" }
+
+                        if (cont.isActive) cont.resume(token)
+                    }
+                }
+            })
+        }
+    }
 
     private fun setupRoomEvents(room: Room) {
         lifecycleScope.launch {
@@ -250,11 +294,15 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                     }
+                    is RoomEvent.TrackUnsubscribed -> {
+                        // Handle track removal if needed
+                    }
                     else -> println("📢 Event: $event")
                 }
             }
         }
     }
+
 
 
 
