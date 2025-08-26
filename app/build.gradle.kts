@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose") version "2.0.21"
+    id("org.jlleitschuh.gradle.ktlint") version "12.1.0"
 }
 
 android {
@@ -17,6 +18,9 @@ android {
 
         vectorDrawables {
             useSupportLibrary = true
+        }
+        ndk {
+            abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
         }
     }
 
@@ -41,7 +45,7 @@ android {
 }
 
 dependencies {
-    // Compose BOM - manages all Compose library versions
+    // Compose BOM
     implementation(platform("androidx.compose:compose-bom:2024.02.00"))
 
     // Core Compose dependencies
@@ -60,8 +64,8 @@ dependencies {
     // Material Design
     implementation("com.google.android.material:material:1.11.0")
 
-    // LiveKit
-    implementation("io.livekit:livekit-android:2.20.1")
+    // LiveKit - Use latest version
+    implementation("io.livekit:livekit-android:2.20.1") // Check for newer versions, e.g., 2.21.0
 
     // Core Android libraries
     implementation("androidx.core:core-ktx:1.12.0")
@@ -72,7 +76,7 @@ dependencies {
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
-    // Optional: Debug tools for Compose
+    // Debug tools for Compose
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

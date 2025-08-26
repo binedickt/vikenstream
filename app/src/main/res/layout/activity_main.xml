@@ -11,29 +11,52 @@
         android:layout_height="match_parent"
         android:gravity="center"
         android:orientation="vertical"
-        android:padding="24dp">
+        android:padding="32dp"
+        android:background="#FFFFFF">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="VikenStream"
+            android:textSize="32sp"
+            android:textStyle="bold"
+            android:textColor="#333333"
+            android:layout_marginBottom="48dp" />
 
         <EditText
             android:id="@+id/usernameEditText"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="56dp"
             android:hint="Username"
             android:inputType="textPersonName"
-            android:layout_marginBottom="12dp" />
+            android:padding="16dp"
+            android:layout_marginBottom="16dp"
+            android:background="@drawable/edittext_background"
+            android:textColor="#333333"
+            android:textColorHint="#666666" />
 
         <EditText
             android:id="@+id/passwordEditText"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="56dp"
             android:hint="Password"
             android:inputType="textPassword"
-            android:layout_marginBottom="16dp" />
+            android:padding="16dp"
+            android:layout_marginBottom="32dp"
+            android:background="@drawable/edittext_background"
+            android:textColor="#333333"
+            android:textColorHint="#666666" />
 
         <Button
             android:id="@+id/loginButton"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Login" />
+            android:layout_height="56dp"
+            android:text="Login"
+            android:textSize="18sp"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/button_background"
+            android:textAllCaps="false" />
+
     </LinearLayout>
 
     <!-- Room List Screen -->
@@ -42,33 +65,351 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:padding="16dp"
+        android:background="#FFFFFF"
         android:visibility="gone">
 
-        <TextView
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Available Rooms"
-            android:textStyle="bold"
-            android:textSize="18sp"
-            android:layout_marginBottom="8dp" />
+            android:orientation="horizontal"
+            android:padding="16dp"
+            android:background="#F8F9FA"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Available Rooms"
+                android:textStyle="bold"
+                android:textSize="20sp"
+                android:textColor="#333333" />
+
+            <Button
+                android:id="@+id/refreshRoomsButton"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="↻"
+                android:textSize="16sp"
+                android:background="@drawable/control_button_background"
+                android:textColor="#FFFFFF"
+                android:paddingHorizontal="12dp" />
+
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#E0E0E0" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/roomList"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:scrollbars="vertical" />
+            android:padding="8dp"
+            android:scrollbars="vertical"
+            android:clipToPadding="false" />
+
     </LinearLayout>
 
     <!-- Video Call Screen -->
-    <FrameLayout
+    <RelativeLayout
         android:id="@+id/videoCallContainer"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="#000000"
         android:visibility="gone">
-        <!-- LiveKit video tracks will render here -->
-    </FrameLayout>
+
+        <!-- Remote Video Views Grid -->
+        <LinearLayout
+            android:id="@+id/remoteVideoGrid"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:layout_above="@+id/controlsContainer">
+
+            <!-- Top Row -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:orientation="horizontal">
+
+                <FrameLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_margin="1dp"
+                    android:background="#1A1A1A">
+
+                    <io.livekit.android.renderer.SurfaceViewRenderer
+                        android:id="@+id/remoteVideoView1"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/participantName1"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="bottom|start"
+                        android:layout_margin="8dp"
+                        android:background="#80000000"
+                        android:padding="4dp"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:visibility="gone" />
+
+                </FrameLayout>
+
+                <FrameLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_margin="1dp"
+                    android:background="#1A1A1A">
+
+                    <io.livekit.android.renderer.SurfaceViewRenderer
+                        android:id="@+id/remoteVideoView2"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/participantName2"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="bottom|start"
+                        android:layout_margin="8dp"
+                        android:background="#80000000"
+                        android:padding="4dp"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:visibility="gone" />
+
+                </FrameLayout>
+
+            </LinearLayout>
+
+            <!-- Bottom Row -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:orientation="horizontal">
+
+                <FrameLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_margin="1dp"
+                    android:background="#1A1A1A">
+
+                    <io.livekit.android.renderer.SurfaceViewRenderer
+                        android:id="@+id/remoteVideoView3"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/participantName3"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="bottom|start"
+                        android:layout_margin="8dp"
+                        android:background="#80000000"
+                        android:padding="4dp"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:visibility="gone" />
+
+                </FrameLayout>
+
+                <FrameLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_margin="1dp"
+                    android:background="#1A1A1A">
+
+                    <io.livekit.android.renderer.SurfaceViewRenderer
+                        android:id="@+id/remoteVideoView4"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/participantName4"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="bottom|start"
+                        android:layout_margin="8dp"
+                        android:background="#80000000"
+                        android:padding="4dp"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:visibility="gone" />
+
+                </FrameLayout>
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- Local Video View (Picture-in-Picture) -->
+        <FrameLayout
+            android:id="@+id/localVideoContainer"
+            android:layout_width="120dp"
+            android:layout_height="160dp"
+            android:layout_alignParentTop="true"
+            android:layout_alignParentEnd="true"
+            android:layout_margin="16dp"
+            android:background="#333333">
+
+            <io.livekit.android.renderer.SurfaceViewRenderer
+                android:id="@+id/localVideoView"
+                android:layout_width="120dp"
+                android:layout_height="160dp"
+                android:layout_margin="8dp"
+                android:visibility="gone" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|center"
+                android:layout_margin="4dp"
+                android:background="#80000000"
+                android:padding="4dp"
+                android:text="You"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp" />
+
+            <!-- Camera off indicator -->
+            <TextView
+                android:id="@+id/cameraOffIndicator"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="📹❌"
+                android:textSize="24sp"
+                android:visibility="gone" />
+
+        </FrameLayout>
+
+        <!-- Status Information -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentTop="true"
+            android:layout_alignParentStart="true"
+            android:layout_margin="16dp"
+            android:orientation="vertical"
+            android:background="#80000000"
+            android:padding="8dp">
+
+            <TextView
+                android:id="@+id/participantCountText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Participants: 1"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/connectionStatusText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="● Connected"
+                android:textColor="#4CAF50"
+                android:textSize="12sp" />
+
+        </LinearLayout>
+
+        <!-- Controls Container -->
+        <LinearLayout
+            android:id="@+id/controlsContainer"
+            android:layout_width="match_parent"
+            android:layout_height="100dp"
+            android:layout_alignParentBottom="true"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:background="@drawable/controls_background"
+            android:padding="20dp">
+
+            <Button
+                android:id="@+id/cameraToggleButton"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:text="📹"
+                android:textSize="24sp"
+                android:background="@drawable/control_button_background"
+                android:textColor="#FFFFFF"
+                android:layout_marginEnd="20dp" />
+
+            <Button
+                android:id="@+id/micToggleButton"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:text="🎤"
+                android:textSize="24sp"
+                android:background="@drawable/control_button_background"
+                android:textColor="#FFFFFF"
+                android:layout_marginEnd="20dp" />
+
+            <Button
+                android:id="@+id/switchCameraButton"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:text="🔄"
+                android:textSize="20sp"
+                android:background="@drawable/control_button_background"
+                android:textColor="#FFFFFF"
+                android:layout_marginEnd="20dp" />
+
+            <Button
+                android:id="@+id/leaveRoomButton"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:text="📞"
+                android:textSize="24sp"
+                android:background="@drawable/leave_button_background"
+                android:textColor="#FFFFFF" />
+
+        </LinearLayout>
+
+        <!-- Loading overlay -->
+        <FrameLayout
+            android:id="@+id/loadingOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#80000000"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <ProgressBar
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_marginBottom="16dp" />
+
+                <TextView
+                    android:id="@+id/loadingText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Connecting..."
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp" />
+
+            </LinearLayout>
+
+        </FrameLayout>
+
+    </RelativeLayout>
 
 </FrameLayout>
