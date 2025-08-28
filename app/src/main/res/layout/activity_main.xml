@@ -269,10 +269,9 @@
 
             <io.livekit.android.renderer.SurfaceViewRenderer
                 android:id="@+id/localVideoView"
-                android:layout_width="120dp"
-                android:layout_height="160dp"
-                android:layout_margin="8dp"
-                android:visibility="gone" />
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="visible" />
 
             <TextView
                 android:layout_width="wrap_content"
@@ -330,7 +329,7 @@
         <LinearLayout
             android:id="@+id/controlsContainer"
             android:layout_width="match_parent"
-            android:layout_height="100dp"
+            android:layout_height="120dp"
             android:layout_alignParentBottom="true"
             android:orientation="horizontal"
             android:gravity="center"

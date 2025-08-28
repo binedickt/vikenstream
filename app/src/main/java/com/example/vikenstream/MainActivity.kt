@@ -2,7 +2,6 @@ package com.example.vikenstream
 
 import android.content.pm.PackageManager
 import android.os.Bundle
-//import android.view.SurfaceView
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -15,7 +14,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.vikenstream.databinding.ActivityMainBinding
 import io.livekit.android.LiveKit
 import io.livekit.android.room.Room
-//import io.livekit.android.room.track.Track
 import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.collect
 import io.livekit.android.renderer.SurfaceViewRenderer
@@ -24,13 +22,12 @@ import livekit.org.webrtc.EglBase
 import livekit.org.webrtc.RendererCommon
 import livekit.org.webrtc.Logging
 import io.livekit.android.room.track.VideoTrack
+import io.livekit.android.room.track.AudioTrack
 import kotlinx.coroutines.launch
 import okhttp3.*
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.MediaType.Companion.toMediaType
-//import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import org.json.JSONObject
-//import org.json.JSONArray
 import java.io.IOException
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.resume
@@ -44,6 +41,7 @@ class MainActivity : AppCompatActivity() {
     private var accessToken: String? = null
     private var localVideoTrack: VideoTrack? = null
     private val remoteVideoTracks = mutableMapOf<String, VideoTrack>()
+    private var isLocalVideoInitialized = false // Track initialization state
 
     companion object {
         init {
@@ -65,7 +63,10 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-//        eglBase = EglBase.create()
+
+        // Initialize EglBase with shared context for all renderers
+        eglBase = EglBase.create()
+        val eglContext = eglBase.eglBaseContext
 
         try {
             Logging.enableLogToDebugOutput(Logging.Severity.LS_VERBOSE)
@@ -75,37 +76,26 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "WebRTC logging unavailable: ${e.message}", Toast.LENGTH_LONG).show()
         }
 
-        // ✅ Initialize LiveKit SurfaceViewRenderer
-        initRenderer(binding.remoteVideoView1)
-        initRenderer(binding.remoteVideoView2)
-        initRenderer(binding.remoteVideoView3)
-        initRenderer(binding.remoteVideoView4)
+        // Initialize all renderers with the same EGL context
+        initRenderer(binding.remoteVideoView1, eglContext)
+        initRenderer(binding.remoteVideoView2, eglContext)
+        initRenderer(binding.remoteVideoView3, eglContext)
+        initRenderer(binding.remoteVideoView4, eglContext)
 
-        initRenderer(binding.localVideoView)
+        // Initialize TextureViewRenderer for local video with the same EGL context
+        initTextureRenderer(binding.localVideoView, eglContext)
 
         setupUI()
         checkPermissions()
     }
 
-    private fun initRenderer(renderer: Any) {
+    private fun initRenderer(renderer: SurfaceViewRenderer, eglContext: EglBase.Context?) {
         try {
-            when (renderer) {
-                is SurfaceViewRenderer -> {
-                    renderer.init(null, null)
-                    renderer.setEnableHardwareScaler(true)
-                    renderer.setMirror(true)
-                    renderer.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
-                    Log.d("MainActivity", "SurfaceViewRenderer initialized: ${renderer.id}")
-                }
-                is TextureViewRenderer -> {
-                    renderer.init(null, null)
-                    renderer.setMirror(true)
-                    Log.d("MainActivity", "TextureViewRenderer initialized")
-                }
-                else -> {
-                    Log.w("MainActivity", "Unsupported renderer type: ${renderer::class.java}")
-                }
-            }
+            renderer.init(null, null)
+            renderer.setEnableHardwareScaler(true)
+            renderer.setMirror(false)
+            renderer.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
+            Log.d("MainActivity", "SurfaceViewRenderer initialized: ${renderer.id}")
         } catch (e: Exception) {
             Log.e("MainActivity", "Renderer initialization failed: ${e.message}")
             runOnUiThread {
@@ -113,6 +103,42 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
+    private fun initTextureRenderer(renderer: SurfaceViewRenderer, eglContext: EglBase.Context?) {
+        try {
+            renderer.release() // Ensure clean state
+            renderer.init(eglContext ?: EglBase.create().eglBaseContext, null)
+            renderer.setMirror(true)
+            renderer.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
+            renderer.setEnableHardwareScaler(true)
+            renderer.setZOrderMediaOverlay(true)
+            isLocalVideoInitialized = true
+            Log.d("MainActivity", "SurfaceViewRenderer initialized: eglContext=${eglContext != null}")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "SurfaceViewRenderer initialization failed: ${e.message}", e)
+            runOnUiThread {
+                Toast.makeText(this, "Renderer initialization failed: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+            isLocalVideoInitialized = false
+            // Retry initialization
+            lifecycleScope.launch {
+                delay(500)
+                try {
+                    renderer.release()
+                    renderer.init(EglBase.create().eglBaseContext, null)
+                    renderer.setMirror(true)
+                    renderer.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
+                    renderer.setEnableHardwareScaler(true)
+                    renderer.setZOrderMediaOverlay(true)
+                    isLocalVideoInitialized = true
+                    Log.d("MainActivity", "SurfaceViewRenderer retry initialized: isInitialized=${renderer}")
+                } catch (e2: Exception) {
+                    Log.e("MainActivity", "SurfaceViewRenderer retry failed: ${e2.message}", e2)
+                }
+            }
+        }
+    }
+
 
     private fun checkPermissions() {
         val missingPermissions = REQUIRED_PERMISSIONS.filter {
@@ -342,8 +368,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-
-
     /**
      * Fetch LiveKit JWT token for this user and room from your backend
      */
@@ -384,13 +408,14 @@ class MainActivity : AppCompatActivity() {
     private fun setupRoomEvents(room: Room) {
         lifecycleScope.launch {
             room.events.collect { event ->
+                Log.d("MainActivity", "Processing event: $event")
                 when (event) {
                     is RoomEvent.Connected -> {
                         runOnUiThread {
                             Toast.makeText(this@MainActivity, "✅ Connected to room!", Toast.LENGTH_SHORT).show()
-                            // Enable local camera after connecting
-                            enableLocalVideo(room)
                         }
+                        Log.d("MainActivity", "Connected to room: $room")
+                        enableLocalVideo(room)
                     }
                     is RoomEvent.Disconnected -> {
                         runOnUiThread {
@@ -400,12 +425,12 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                     is RoomEvent.TrackSubscribed -> {
+                        Log.d("MainActivity", "📢 TrackSubscribed event: $event")
                         val track = event.track
                         val participant = event.participant
                         if (track is VideoTrack) {
                             runOnUiThread {
                                 Toast.makeText(this@MainActivity, "🎥 Video track received from ${participant.identity}", Toast.LENGTH_SHORT).show()
-                                // Attach remote video track to UI
                                 participant.identity?.let { identity ->
                                     attachRemoteVideoTrack(track, identity.value)
                                 }
@@ -431,7 +456,36 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                     }
-                    else -> println("📢 Event: $event")
+
+                    is RoomEvent.TrackPublished -> {
+                        Log.d("MainActivity", "📢 Event: Enter TrackPublished")
+                        val publication = event.publication
+                        val participant = event.participant.identity
+                        Log.d("MainActivity", "📢 Event: ${participant}, ${room.localParticipant.identity}, ${publication.track}")
+                        if (publication.track is VideoTrack && participant == room.localParticipant.identity) {
+                            val videoTrack = publication.track as VideoTrack
+                            localVideoTrack = videoTrack
+                            runOnUiThread {
+                                Log.d("MainActivity", "TrackPublished event: Local video track $videoTrack")
+                                attachLocalVideoTrack(videoTrack)
+                            }
+                        } else {
+                            Log.d("MainActivity", "TrackPublished skipped: track=${publication.track}, isVideo=${publication.track is VideoTrack}, isLocal=${participant == room.localParticipant.identity}")
+                            if (participant == room.localParticipant.identity && publication.track is AudioTrack) {
+                                val videoPublication = room.localParticipant.trackPublications.values
+                                    .firstOrNull { it.track is VideoTrack && it.kind == io.livekit.android.room.track.Track.Kind.VIDEO }
+                                if (videoPublication != null) {
+                                    val videoTrack = videoPublication.track as VideoTrack
+                                    localVideoTrack = videoTrack
+                                    runOnUiThread {
+                                        Log.d("MainActivity", "Fallback: Found existing video track $videoTrack after audio track event")
+                                        attachLocalVideoTrack(videoTrack)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else -> Log.d("MainActivity", "📢 Unhandled event: $event")
                 }
             }
         }
@@ -443,39 +497,68 @@ class MainActivity : AppCompatActivity() {
                 if (ContextCompat.checkSelfPermission(this@MainActivity, android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
                     runOnUiThread {
                         Toast.makeText(this@MainActivity, "Camera permission is required to enable video", Toast.LENGTH_LONG).show()
+                        ActivityCompat.requestPermissions(
+                            this@MainActivity,
+                            arrayOf(android.Manifest.permission.CAMERA),
+                            PERMISSION_REQUEST_CODE
+                        )
                     }
                     return@launch
                 }
 
-                // Enable camera and create local video track
-                room.localParticipant.setCameraEnabled(true)
-
-                delay(1500)
-
-                // Get the local video track
-                val videoTrack = room.localParticipant
-                    .trackPublications
-                    .values
-                    .firstOrNull { it.track is VideoTrack }
-                    ?.track as? VideoTrack
-
-//                localVideoTrack = room.localParticipant.videoTracks.firstOrNull()?.track as? VideoTrack
-
-                if (videoTrack == null) {
-                    Log.e("MainActivity", "No local video track found")
+                val cameraEnumerator = if (livekit.org.webrtc.Camera2Enumerator.isSupported(this@MainActivity)) {
+                    Log.d("MainActivity", "Using Camera2Enumerator")
+                    livekit.org.webrtc.Camera2Enumerator(this@MainActivity)
+                } else {
+                    Log.d("MainActivity", "Falling back to Camera1Enumerator")
+                    livekit.org.webrtc.Camera1Enumerator(false)
+                }
+                val cameraDevices = cameraEnumerator.deviceNames
+                Log.d("MainActivity", "Available cameras: ${cameraDevices.joinToString()}")
+                if (cameraDevices.isEmpty()) {
                     runOnUiThread {
-                        Toast.makeText(this@MainActivity, "No local video track available", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@MainActivity, "No camera devices available", Toast.LENGTH_LONG).show()
                     }
                     return@launch
                 }
-                localVideoTrack = videoTrack
 
-                runOnUiThread {
-                    // Attach local video to the local video view
-                    attachLocalVideoTrack(videoTrack)
+                val frontCamera = cameraDevices.find { cameraEnumerator.isFrontFacing(it) } ?: cameraDevices[0]
+                Log.d("MainActivity", "Selected camera: $frontCamera")
+
+                Log.d("MainActivity", "Enabling camera...")
+                room.localParticipant.setCameraEnabled(true)
+                room.localParticipant.setMicrophoneEnabled(true)
+                Log.d("MainActivity", "Camera and microphone enabled, waiting for TrackPublished event")
+                repeat(5) { attempt ->
+                    delay(500) // Wait 1 second per attempt
+                    val videoPublication = room.localParticipant.trackPublications.values
+                        .firstOrNull { it.track is VideoTrack && it.kind == io.livekit.android.room.track.Track.Kind.VIDEO }
+                    if (videoPublication != null) {
+                        val videoTrack = videoPublication.track as VideoTrack
+                        Log.d("MainActivity", "Video track found after ${attempt + 1} attempts")
+                        localVideoTrack = videoTrack
+                        runOnUiThread {
+                            attachLocalVideoTrack(videoTrack)
+                        }
+                        return@repeat
+                    }
+                    Log.w("MainActivity", "Video track not found on attempt ${attempt + 1}")
+                    if (attempt < 4) {
+                        Log.d("MainActivity", "Retrying camera enable...")
+                        room.localParticipant.setCameraEnabled(false)
+                        delay(200)
+                        room.localParticipant.setCameraEnabled(true)
+                    }
                 }
 
+                if (room.localParticipant.trackPublications.values.none { it.track is VideoTrack }) {
+                    Log.e("MainActivity", "Failed to publish video track after retries")
+                    runOnUiThread {
+                        Toast.makeText(this@MainActivity, "Failed to publish video track", Toast.LENGTH_LONG).show()
+                    }
+                }
             } catch (e: Exception) {
+                Log.e("MainActivity", "Failed to enable camera: ${e.message}", e)
                 runOnUiThread {
                     Toast.makeText(this@MainActivity, "Failed to enable camera: ${e.message}", Toast.LENGTH_LONG).show()
                 }
@@ -485,23 +568,40 @@ class MainActivity : AppCompatActivity() {
 
     private fun attachLocalVideoTrack(track: VideoTrack) {
         runOnUiThread {
-            binding.localVideoView.let { videoView ->
-                try {
+            try {
+                binding.localVideoView.let { videoView ->
+                    localVideoTrack?.removeRenderer(videoView)
+                    localVideoTrack = track
                     track.addRenderer(videoView)
+                    videoView.setMirror(true)
+                    videoView.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
                     videoView.visibility = View.VISIBLE
-                    Log.d("MainActivity", "Local video track attached to renderer")
-                } catch (e: Exception) {
-                    Log.e("MainActivity", "Failed to attach local video track: ${e.message}")
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Failed to attach video: ${e.message}",
-                        Toast.LENGTH_LONG
-                    ).show()
+                    videoView.requestLayout()
+                    Log.d("MainActivity", "Local video track attached to SurfaceViewRenderer: $track")
+                    Toast.makeText(this@MainActivity, "✅ Local video enabled", Toast.LENGTH_SHORT).show()
+                    lifecycleScope.launch {
+                        repeat(3) { attempt ->
+                            delay(1000)
+                            if (videoView.visibility == View.VISIBLE && localVideoTrack == track) {
+                                Log.w(
+                                    "MainActivity",
+                                    "Retrying renderer initialization and track attachment (attempt ${attempt + 1})"
+                                )
+                                initTextureRenderer(videoView, eglBase.eglBaseContext)
+                                track.addRenderer(videoView)
+                                videoView.requestLayout()
+                            }
+                        }
+                    }
                 }
-
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Failed to attach local video track: ${e.message}", e)
+                Toast.makeText(this@MainActivity, "Failed to attach video: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
     }
+
+    // ✅ Remove the separate attachVideoTrackToView method since TextureView doesn't need it
 
     private val remoteRenderers: List<SurfaceViewRenderer>
         get() = listOf(
@@ -511,30 +611,31 @@ class MainActivity : AppCompatActivity() {
             binding.remoteVideoView4
         )
 
-
     private fun attachRemoteVideoTrack(track: VideoTrack, participantId: String) {
         // Store the track
         remoteVideoTracks[participantId] = track
 
-        // Find an available remote video view or create one
-        val videoView = getAvailableRemoteVideoView( participantId)
+        // Find an available remote video view
+        val videoView = getAvailableRemoteVideoView(participantId)
         videoView?.let {
-            track.addRenderer(videoView)   // ✅ VideoView implements VideoSink
+            // ✅ Don't mirror remote videos
+            videoView.setMirror(false)
+            track.addRenderer(videoView)
             videoView.visibility = View.VISIBLE
-            videoView.tag = participantId  // Store participant ID for reference
+            videoView.tag = participantId
+            Log.d("MainActivity", "Remote video track attached for participant: $participantId")
         }
 
         // Update participants list
         updateParticipantsList()
     }
 
-
     private fun removeRemoteVideoTrack(participantId: String) {
         remoteVideoTracks[participantId]?.let { track ->
             // Find the video view for this participant
             val videoView = findVideoViewForParticipant(participantId)
             videoView?.let {
-                track.removeRenderer(videoView) // ✅ Safe removal
+                track.removeRenderer(videoView)
                 videoView.visibility = View.GONE
                 videoView.tag = null
             }
@@ -591,20 +692,22 @@ class MainActivity : AppCompatActivity() {
         remoteVideoTracks.clear()
     }
 
-    // Add video control methods
     private fun toggleCamera() {
         room?.let { room ->
             lifecycleScope.launch {
                 try {
                     val isEnabled = room.localParticipant.isCameraEnabled
                     room.localParticipant.setCameraEnabled(!isEnabled)
-
                     runOnUiThread {
                         binding.cameraToggleButton.text = if (!isEnabled) "📹" else "📹❌"
                         if (!isEnabled) {
                             binding.localVideoView.visibility = View.VISIBLE
+                            localVideoTrack?.let { track ->
+                                attachLocalVideoTrack(track)
+                            }
                         } else {
                             binding.localVideoView.visibility = View.GONE
+                            localVideoTrack?.removeRenderer(binding.localVideoView)
                         }
                     }
                 } catch (e: Exception) {
@@ -613,6 +716,23 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
+        }
+    }
+
+    // ✅ Add debugging method
+    private fun debugVideoState() {
+        room?.let { room ->
+            Log.d("MainActivity", "=== DEBUG VIDEO STATE ===")
+            Log.d("MainActivity", "Camera enabled: ${room.localParticipant.isCameraEnabled}")
+            Log.d("MainActivity", "Local video track: $localVideoTrack")
+            Log.d("MainActivity", "Track publications: ${room.localParticipant.trackPublications.size}")
+            room.localParticipant.trackPublications.values.forEachIndexed { index, pub ->
+                Log.d("MainActivity", "Publication $index: ${pub.kind}, track: ${pub.track}")
+            }
+            Log.d("MainActivity", "Local video view visibility: ${binding.localVideoView.visibility}")
+            Log.d("MainActivity", "Local video view dimensions: ${binding.localVideoView.width}x${binding.localVideoView.height}")
+            Log.d("MainActivity", "Camera devices: ${livekit.org.webrtc.Camera2Enumerator(this@MainActivity).deviceNames}")
+            Log.d("MainActivity", "=== END DEBUG ===")
         }
     }
 
@@ -665,10 +785,16 @@ class MainActivity : AppCompatActivity() {
         binding.roomListContainer.visibility = View.GONE
         binding.videoCallContainer.visibility = View.VISIBLE
 
+        binding.localVideoView.post {
+            Log.d("MainActivity", "Local video view dimensions: ${binding.localVideoView.width}x${binding.localVideoView.height}")
+        }
         // Setup control buttons
         binding.cameraToggleButton.setOnClickListener { toggleCamera() }
         binding.micToggleButton.setOnClickListener { toggleMicrophone() }
         binding.leaveRoomButton.setOnClickListener { leaveRoom() }
+
+        // ✅ Add debug button (temporary for testing)
+        binding.participantCountText.setOnClickListener { debugVideoState() }
 
         // Initialize button states
         binding.cameraToggleButton.text = "📹"
@@ -680,5 +806,10 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         cleanupVideoTracks()
         room?.disconnect()
+        room = null
+        binding.localVideoView.release()
+        remoteRenderers.forEach { it.release() }
+        eglBase.release()
+        Log.d("MainActivity", "Cleaned up resources in onDestroy")
     }
 }
