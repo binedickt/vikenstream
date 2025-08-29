@@ -403,7 +403,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 room.localParticipant.setCameraEnabled(true)
-                room.localParticipant.setMicrophoneEnabled(true)
+                room.localParticipant.setMicrophoneEnabled(false)
 
                 repeat(5) { attempt ->
                     delay(500)
@@ -444,6 +444,7 @@ class MainActivity : AppCompatActivity() {
             track.addRenderer(videoView)
             videoView.setMirror(true)
             videoView.visibility = View.VISIBLE
+            videoView.bringToFront()
             Log.d("MainActivity", "Local video track attached successfully")
         }
     }
@@ -479,6 +480,7 @@ class MainActivity : AppCompatActivity() {
             Log.d("MainActivity", "Remote video track attached for $participantId")
         }
         updateParticipantsList()
+        binding.localVideoView.bringToFront()
     }
 
     private fun removeRemoteVideoTrack(participantId: String) {
@@ -543,6 +545,7 @@ class MainActivity : AppCompatActivity() {
                         binding.cameraToggleButton.text = if (!isEnabled) "📹" else "📹❌"
                         if (!isEnabled) {
                             binding.localVideoView.visibility = View.VISIBLE
+                            binding.localVideoView.bringToFront()
                             localVideoTrack?.let { track ->
                                 attachLocalVideoTrack(track)
                             }
@@ -609,7 +612,7 @@ class MainActivity : AppCompatActivity() {
         binding.leaveRoomButton.setOnClickListener { leaveRoom() }
 
         binding.cameraToggleButton.text = "📹"
-        binding.micToggleButton.text = "🎤"
+        binding.micToggleButton.text = "🎤❌"
         binding.participantCountText.text = "Participants: 1"
     }
 

@@ -85,15 +85,15 @@
                 android:textSize="20sp"
                 android:textColor="#333333" />
 
-            <Button
-                android:id="@+id/refreshRoomsButton"
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:text="↻"
-                android:textSize="16sp"
-                android:background="@drawable/control_button_background"
-                android:textColor="#FFFFFF"
-                android:paddingHorizontal="12dp" />
+<!--            <Button-->
+<!--                android:id="@+id/refreshRoomsButton"-->
+<!--                android:layout_width="wrap_content"-->
+<!--                android:layout_height="36dp"-->
+<!--                android:text="↻"-->
+<!--                android:textSize="16sp"-->
+<!--                android:background="@drawable/control_button_background"-->
+<!--                android:textColor="#FFFFFF"-->
+<!--                android:paddingHorizontal="12dp" />-->
 
         </LinearLayout>
 
@@ -263,7 +263,7 @@
             android:layout_width="120dp"
             android:layout_height="160dp"
             android:layout_alignParentTop="true"
-            android:layout_alignParentEnd="true"
+            android:layout_alignParentStart="true"
             android:layout_margin="16dp"
             android:background="#333333">
 
@@ -271,6 +271,8 @@
                 android:id="@+id/localVideoView"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:elevation="8dp"
+                android:translationZ="8dp"
                 android:visibility="visible" />
 
             <TextView
@@ -329,12 +331,12 @@
         <LinearLayout
             android:id="@+id/controlsContainer"
             android:layout_width="match_parent"
-            android:layout_height="120dp"
+            android:layout_height="80dp"
             android:layout_alignParentBottom="true"
             android:orientation="horizontal"
             android:gravity="center"
             android:background="@drawable/controls_background"
-            android:padding="20dp">
+            android:padding="5dp">
 
             <Button
                 android:id="@+id/cameraToggleButton"
@@ -356,15 +358,15 @@
                 android:textColor="#FFFFFF"
                 android:layout_marginEnd="20dp" />
 
-            <Button
-                android:id="@+id/switchCameraButton"
-                android:layout_width="64dp"
-                android:layout_height="64dp"
-                android:text="🔄"
-                android:textSize="20sp"
-                android:background="@drawable/control_button_background"
-                android:textColor="#FFFFFF"
-                android:layout_marginEnd="20dp" />
+<!--            <Button-->
+<!--                android:id="@+id/switchCameraButton"-->
+<!--                android:layout_width="64dp"-->
+<!--                android:layout_height="64dp"-->
+<!--                android:text="🔄"-->
+<!--                android:textSize="20sp"-->
+<!--                android:background="@drawable/control_button_background"-->
+<!--                android:textColor="#FFFFFF"-->
+<!--                android:layout_marginEnd="20dp" />-->
 
             <Button
                 android:id="@+id/leaveRoomButton"
