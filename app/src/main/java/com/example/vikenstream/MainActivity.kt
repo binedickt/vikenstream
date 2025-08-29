@@ -38,6 +38,10 @@ class MainActivity : AppCompatActivity() {
     private var localVideoTrack: VideoTrack? = null
     private val remoteVideoTracks = mutableMapOf<String, VideoTrack>()
 
+    // Track initialization state to prevent double initialization
+    private var isLocalVideoRendererInitialized = false
+    private val remoteVideoRenderersInitialized = mutableSetOf<SurfaceViewRenderer>()
+
     companion object {
         init {
             try {
@@ -420,15 +424,27 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun attachLocalVideoTrack(track: VideoTrack) {
-        runOnUiThread {
-            binding.localVideoView.let { videoView ->
-                localVideoTrack?.removeRenderer(videoView)
-                localVideoTrack = track
-                room?.initVideoRenderer(videoView) // ✅ use LiveKit init
-                track.addRenderer(videoView)
-                videoView.setMirror(true)
-                videoView.visibility = View.VISIBLE
+        binding.localVideoView.let { videoView ->
+            // Remove previous track if exists
+            localVideoTrack?.removeRenderer(videoView)
+
+            // Initialize renderer with LiveKit's EGL context if not already initialized
+            if (!isLocalVideoRendererInitialized) {
+                try {
+                    room?.initVideoRenderer(videoView)
+                    isLocalVideoRendererInitialized = true
+                    Log.d("MainActivity", "Local video renderer initialized with LiveKit context")
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "Failed to initialize local video renderer: ${e.message}")
+                    return
+                }
             }
+
+            localVideoTrack = track
+            track.addRenderer(videoView)
+            videoView.setMirror(true)
+            videoView.visibility = View.VISIBLE
+            Log.d("MainActivity", "Local video track attached successfully")
         }
     }
 
@@ -444,11 +460,23 @@ class MainActivity : AppCompatActivity() {
         remoteVideoTracks[participantId] = track
         val videoView = getAvailableRemoteVideoView(participantId)
         videoView?.let {
-            room?.initVideoRenderer(it) // ✅ use LiveKit init
+            // Only initialize if not already initialized
+            if (!remoteVideoRenderersInitialized.contains(it)) {
+                try {
+                    room?.initVideoRenderer(it)
+                    remoteVideoRenderersInitialized.add(it)
+                    Log.d("MainActivity", "Remote video renderer initialized for $participantId")
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "Failed to initialize remote video renderer: ${e.message}")
+                    return
+                }
+            }
+
             it.setMirror(false)
             track.addRenderer(it)
             it.visibility = View.VISIBLE
             it.tag = participantId
+            Log.d("MainActivity", "Remote video track attached for $participantId")
         }
         updateParticipantsList()
     }
@@ -590,8 +618,21 @@ class MainActivity : AppCompatActivity() {
         cleanupVideoTracks()
         room?.disconnect()
         room = null
-        binding.localVideoView.release()
-        remoteRenderers.forEach { it.release() }
+
+        // Clean up renderer initialization state
+        isLocalVideoRendererInitialized = false
+        remoteVideoRenderersInitialized.clear()
+
+        // Release renderers safely
+        try {
+            binding.localVideoView.release()
+            remoteRenderers.forEach { renderer ->
+                renderer.release()
+            }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error releasing video renderers: ${e.message}")
+        }
+
         Log.d("MainActivity", "Cleaned up resources in onDestroy")
     }
 }
