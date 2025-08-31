@@ -1,5 +1,6 @@
 package com.example.vikenstream
 
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.View
@@ -63,13 +64,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        try {
-            Logging.enableLogToDebugOutput(Logging.Severity.LS_VERBOSE)
-            Log.d("MainActivity", "WebRTC verbose logging enabled")
-        } catch (e: UnsatisfiedLinkError) {
-            Log.e("MainActivity", "Failed to enable WebRTC logging: ${e.message}")
-            Toast.makeText(this, "WebRTC logging unavailable: ${e.message}", Toast.LENGTH_LONG).show()
-        }
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
 
         setupUI()
         checkPermissions()
@@ -212,7 +207,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private suspend fun fetchRooms(token: String): List<String> {
+    private suspend fun fetchRooms(token: String): List<RoomData> {
         return suspendCancellableCoroutine { cont ->
             val client = OkHttpClient()
 
@@ -239,10 +234,14 @@ class MainActivity : AppCompatActivity() {
                         val body = response.body?.string()
                         val jsonObj = JSONObject(body ?: "{}")
                         val jsonArr = jsonObj.getJSONArray("rooms")
-                        val rooms = mutableListOf<String>()
+                        val rooms = mutableListOf<RoomData>()
                         for (i in 0 until jsonArr.length()) {
                             val room = jsonArr.getJSONObject(i)
-                            rooms.add(room.getString("name"))
+                            rooms.add(RoomData(
+                                name = room.getString("name"),
+                                participantCount = room.optInt("participantCount", 0),
+                                isPrivate = room.optBoolean("isPrivate", false)
+                            ))
                         }
                         if (cont.isActive) cont.resume(rooms)
                     }
@@ -251,12 +250,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showRoomsList(rooms: List<String>) {
+    private fun showRoomsList(rooms: List<RoomData>) {
         binding.loginContainer.visibility = View.GONE
         binding.roomListContainer.visibility = View.VISIBLE
 
-        val adapter = RoomsAdapter(rooms) { roomName ->
-            joinRoom(roomName)
+        val adapter = RoomsAdapter(rooms) { roomData ->
+            joinRoom(roomData.name)
         }
         binding.roomList.adapter = adapter
     }

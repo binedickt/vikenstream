@@ -7,30 +7,29 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 
 class RoomsAdapter(
-    private val rooms: List<String>,
-    private val onClick: (String) -> Unit,
+    private val rooms: List<RoomData>,
+    private val onRoomClicked: (RoomData) -> Unit
 ) : RecyclerView.Adapter<RoomsAdapter.RoomViewHolder>() {
-    class RoomViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-        val roomName: TextView = view.findViewById(android.R.id.text1)
+
+    class RoomViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        val roomName: TextView = itemView.findViewById(R.id.roomName)
+        val roomParticipants: TextView = itemView.findViewById(R.id.roomParticipants)
     }
 
-    override fun onCreateViewHolder(
-        parent: ViewGroup,
-        viewType: Int,
-    ): RoomViewHolder {
-        val view =
-            LayoutInflater.from(parent.context)
-                .inflate(android.R.layout.simple_list_item_1, parent, false)
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RoomViewHolder {
+        val view = LayoutInflater.from(parent.context)
+            .inflate(R.layout.item_room, parent, false)
         return RoomViewHolder(view)
     }
 
-    override fun onBindViewHolder(
-        holder: RoomViewHolder,
-        position: Int,
-    ) {
+    override fun onBindViewHolder(holder: RoomViewHolder, position: Int) {
         val room = rooms[position]
-        holder.roomName.text = room
-        holder.itemView.setOnClickListener { onClick(room) }
+
+        holder.roomName.text = room.name
+
+        holder.itemView.setOnClickListener {
+            onRoomClicked(room)
+        }
     }
 
     override fun getItemCount(): Int = rooms.size
